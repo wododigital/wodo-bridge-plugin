@@ -1,0 +1,43 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build plugin zip
+        run: |
+          mkdir -p /tmp/build/wodo-bridge
+          rsync -av \
+            --exclude='.git*' \
+            --exclude='tests' \
+            --exclude='phpunit.xml.dist' \
+            --exclude='node_modules' \
+            --exclude='vendor' \
+            --exclude='.github' \
+            --exclude='*.log' \
+            --exclude='.DS_Store' \
+            --exclude='composer.lock' \
+            ./ /tmp/build/wodo-bridge/
+          cd /tmp/build
+          zip -r /tmp/wodo-bridge.zip wodo-bridge
+          ls -la /tmp/wodo-bridge.zip
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release create "$TAG" \
+            --title "WODO Bridge $TAG" \
+            --notes "Plugin zip for WordPress install. Upload via wp-admin → Plugins → Add New → Upload, or use the WODO Bridge aggregator's auto-install once the plugin is on WordPress.org." \
+            /tmp/wodo-bridge.zip

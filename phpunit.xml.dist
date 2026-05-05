@@ -1,0 +1,44 @@
+<?xml version="1.0"?>
+<phpunit
+    bootstrap="tests/bootstrap.php"
+    backupGlobals="false"
+    colors="true"
+    convertErrorsToExceptions="true"
+    convertNoticesToExceptions="true"
+    convertWarningsToExceptions="true"
+    beStrictAboutTestsThatDoNotTestAnything="false"
+    cacheResultFile="tests/.phpunit.result.cache"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.6/phpunit.xsd"
+>
+    <testsuites>
+        <testsuite name="unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="rest">
+            <directory>tests/Rest</directory>
+        </testsuite>
+        <testsuite name="security">
+            <directory>tests/Security</directory>
+        </testsuite>
+    </testsuites>
+
+    <coverage>
+        <include>
+            <directory suffix=".php">src</directory>
+        </include>
+        <exclude>
+            <directory>src/Admin</directory>
+        </exclude>
+    </coverage>
+
+    <php>
+        <const name="WP_TESTS_FORCE_KNOWN_BUGS" value="false"/>
+        <const name="WB_ALLOW_INSECURE" value="true"/>
+        <env name="WP_PHPUNIT__TESTS_CONFIG" value="tests/wp-tests-config.php"/>
+    </php>
+
+    <logging>
+        <junit outputFile="tests/.phpunit-junit.xml"/>
+    </logging>
+</phpunit>
