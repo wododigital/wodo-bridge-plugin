@@ -24,6 +24,20 @@ final class Auth_Filter {
 	 */
 	private static array $token_store = array();
 
+	/**
+	 * UUID captured from the most recent `application_password_did_authenticate`
+	 * action. Stashed at auth time so `resolve_token()` can look up the bridge
+	 * token row without depending on PHP's `$_SERVER['PHP_AUTH_USER']` /
+	 * `PHP_AUTH_PW` being populated by the SAPI — many hosts (Apache + PHP-FPM,
+	 * LiteSpeed, certain reverse-proxy configurations) drop those superglobals
+	 * even though WordPress itself reads `HTTP_AUTHORIZATION` and authenticates
+	 * the user successfully. Without this fallback, our `auth_only` permission
+	 * gate 401s every request from a freshly-minted App Password.
+	 *
+	 * @var string|null
+	 */
+	private static ?string $captured_uuid = null;
+
 	private float $start_time = 0.0;
 
 	public static function token_for( WP_REST_Request $request ): ?array {
@@ -77,6 +91,13 @@ final class Auth_Filter {
 		if ( $uuid === '' ) {
 			return $user;
 		}
+
+		// Stash for `resolve_token()` to read during `rest_pre_dispatch`. The
+		// action runs once per authenticated request before route dispatch, so
+		// the value is current for the in-flight request. Cleared in
+		// `post_dispatch` to avoid leaking across the same PHP-FPM worker's
+		// next request.
+		self::$captured_uuid = $uuid;
 
 		$service = new Token_Service();
 		$row     = $service->lookup_by_uuid( $uuid );
@@ -141,6 +162,9 @@ final class Auth_Filter {
 		if ( $request instanceof WP_REST_Request ) {
 			unset( self::$token_store[ spl_object_hash( $request ) ] );
 		}
+		// Clear the auth-time UUID so it doesn't leak into the next request
+		// served by the same PHP-FPM worker.
+		self::$captured_uuid = null;
 
 		( new Activity_Logger() )->record(
 			$token_id,
@@ -183,11 +207,24 @@ final class Auth_Filter {
 	}
 
 	private function detect_app_password_uuid( WP_REST_Request $request ): string {
+		// 1. Explicit header from the aggregator (rare — most clients don't
+		// send this).
 		$header = $request->get_header( 'X-WB-AppPassword-UUID' );
 		if ( is_string( $header ) && $header !== '' ) {
 			return sanitize_text_field( $header );
 		}
 
+		// 2. Stashed at `application_password_did_authenticate` time. This is
+		// the canonical, auth-state-independent path: if WordPress
+		// successfully authenticated an App Password at all (regardless of
+		// whether PHP_AUTH_* or HTTP_AUTHORIZATION populated the SAPI), the
+		// action fired and `capture_application_password` recorded the UUID.
+		if ( self::$captured_uuid !== null && self::$captured_uuid !== '' ) {
+			return self::$captured_uuid;
+		}
+
+		// 3. Last-resort password match against PHP_AUTH_*. Only fires when
+		// the SAPI happens to populate these — many hosts don't.
 		if ( isset( $_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW'] ) && function_exists( 'wp_get_current_user' ) ) {
 			$user = wp_get_current_user();
 			if ( $user instanceof \WP_User && $user->exists() && class_exists( '\WP_Application_Passwords' ) ) {
