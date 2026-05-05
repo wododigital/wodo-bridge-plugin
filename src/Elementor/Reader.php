@@ -199,6 +199,37 @@ final class Reader {
 		);
 	}
 
+	public function get_template( int $template_id ): array|WP_Error {
+		if ( ! self::is_active() ) {
+			return new WP_Error( 'elementor_not_active', __( 'Elementor is not active.', 'wodo-bridge' ), array( 'status' => 409 ) );
+		}
+		$post = get_post( $template_id );
+		if ( ! $post || $post->post_type !== 'elementor_library' ) {
+			return new WP_Error( 'not_found', __( 'Template not found.', 'wodo-bridge' ), array( 'status' => 404 ) );
+		}
+		if ( get_post_meta( $template_id, '_elementor_edit_mode', true ) !== 'builder' ) {
+			return new WP_Error( 'not_found', __( 'Template is not built with Elementor.', 'wodo-bridge' ), array( 'status' => 404 ) );
+		}
+
+		$raw     = (string) get_post_meta( $template_id, '_elementor_data', true );
+		$decoded = $raw === '' ? array() : json_decode( $raw, true );
+		if ( ! is_array( $decoded ) ) {
+			$decoded = array();
+		}
+		$page_settings = get_post_meta( $template_id, '_elementor_page_settings', true );
+
+		return array(
+			'id'             => (int) $post->ID,
+			'title'          => (string) $post->post_title,
+			'type'           => (string) ( get_post_meta( $template_id, '_elementor_template_type', true ) ?: 'unknown' ),
+			'status'         => (string) $post->post_status,
+			'modified'       => (string) mysql2date( 'c', $post->post_modified_gmt, false ),
+			'elementor_data' => $decoded,
+			'page_settings'  => is_array( $page_settings ) ? $page_settings : array(),
+			'edit_url'       => (string) admin_url( "post.php?post={$post->ID}&action=elementor" ),
+		);
+	}
+
 	public function list_templates( string $type = '' ): array|WP_Error {
 		if ( ! self::is_active() ) {
 			return new WP_Error( 'elementor_not_active', __( 'Elementor is not active.', 'wodo-bridge' ), array( 'status' => 409 ) );

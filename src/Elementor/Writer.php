@@ -17,7 +17,7 @@ final class Writer {
 		if ( ! Reader::is_active() ) {
 			return new WP_Error( 'elementor_not_active', __( 'Elementor is not active.', 'wodo-bridge' ), array( 'status' => 409 ) );
 		}
-		$validation = $this->validate_payload( $data );
+		$validation = $this->validate( $data );
 		if ( is_wp_error( $validation ) ) {
 			return $validation;
 		}
@@ -81,7 +81,7 @@ final class Writer {
 		}
 
 		if ( ! empty( $data['elementor_data'] ) ) {
-			$validation = $this->validate_payload( $data );
+			$validation = $this->validate( $data );
 			if ( is_wp_error( $validation ) ) {
 				return $validation;
 			}
@@ -98,7 +98,7 @@ final class Writer {
 		if ( ! Reader::is_active() ) {
 			return new WP_Error( 'elementor_not_active', __( 'Elementor is not active.', 'wodo-bridge' ), array( 'status' => 409 ) );
 		}
-		$validation = $this->validate_payload( $data );
+		$validation = $this->validate( $data );
 		if ( is_wp_error( $validation ) ) {
 			return $validation;
 		}
@@ -133,8 +133,22 @@ final class Writer {
 		);
 	}
 
-	private function validate_payload( array $data ): array|WP_Error {
-		if ( empty( $data['title'] ) ) {
+	/**
+	 * Validate (and normalize) an Elementor payload without persisting.
+	 *
+	 * Used internally by create/update flows AND exposed via the
+	 * /elementor/validate REST route so callers can dry-run a payload
+	 * before writing. Skips the `title` requirement when invoked in
+	 * dry-run mode (the validate route does not require a title — only
+	 * the structural shape of `elementor_data` is checked).
+	 *
+	 * On success returns: [ 'elementor_data' => array, 'element_count' => int ]
+	 *
+	 * @param array $data         Payload from caller.
+	 * @param bool  $require_title Whether the title field is mandatory.
+	 */
+	public function validate( array $data, bool $require_title = true ): array|WP_Error {
+		if ( $require_title && empty( $data['title'] ) ) {
 			return new WP_Error( 'validation_failed', __( 'Title is required.', 'wodo-bridge' ), array( 'status' => 422 ) );
 		}
 		if ( empty( $data['elementor_data'] ) ) {
@@ -162,7 +176,10 @@ final class Writer {
 		}
 
 		$payload = $this->ensure_ids( $payload );
-		return array( 'elementor_data' => $payload );
+		return array(
+			'elementor_data' => $payload,
+			'element_count'  => $count,
+		);
 	}
 
 	private function cap_check( array $elements, int $depth, int &$count ): null|WP_Error {

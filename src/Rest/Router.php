@@ -274,6 +274,18 @@ final class Router {
 			),
 		) );
 
+		register_rest_route( $ns, '/elementor/templates/(?P<id>\d+)', array(
+			'methods'             => 'GET',
+			'callback'            => array( $this, 'route_elementor_template_get' ),
+			'permission_callback' => $this->require_scope( 'elementor.read', Constants::RATE_BUCKET_READ_EXPENSIVE ),
+		) );
+
+		register_rest_route( $ns, '/elementor/validate', array(
+			'methods'             => 'POST',
+			'callback'            => array( $this, 'route_elementor_validate' ),
+			'permission_callback' => $this->require_scope( 'elementor.write', Constants::RATE_BUCKET_READ_EXPENSIVE ),
+		) );
+
 		register_rest_route( $ns, '/profile', array(
 			'methods'             => 'GET',
 			'callback'            => array( $this, 'route_profile_get' ),
@@ -772,6 +784,35 @@ final class Router {
 			$payload = $request->get_body_params();
 		}
 		return $this->respond( ( new Elementor_Writer() )->create_template( $payload ), 201 );
+	}
+
+	public function route_elementor_template_get( WP_REST_Request $request ) {
+		$id = (int) $request['id'];
+		return $this->respond( ( new Elementor_Reader() )->get_template( $id ) );
+	}
+
+	public function route_elementor_validate( WP_REST_Request $request ) {
+		$payload = $request->get_json_params();
+		if ( ! is_array( $payload ) ) {
+			$payload = $request->get_body_params();
+		}
+		if ( ! is_array( $payload ) ) {
+			$payload = array();
+		}
+		// Title is intentionally optional here — callers use this route to
+		// dry-run an elementor_data shape before deciding whether to POST a
+		// page/template, and may not have a title yet.
+		$result = ( new Elementor_Writer() )->validate( $payload, false );
+		if ( is_wp_error( $result ) ) {
+			return $this->respond( $result );
+		}
+		return $this->respond(
+			array(
+				'valid'         => true,
+				'element_count' => (int) ( $result['element_count'] ?? 0 ),
+				'normalized'    => $result['elementor_data'],
+			)
+		);
 	}
 
 	public function route_profile_get( WP_REST_Request $request ) {
